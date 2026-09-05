@@ -1,0 +1,35 @@
+# skip amd64_sysv amd64_apple arm64 arm64_apple rv64 x86_64
+# win64: XMM6-XMM15 are callee-saved; qbe must preserve them
+
+export
+function d $clobber(d %a) {
+@start
+	# Keep enough values live that the allocator uses XMM6+.
+	%t0 =d add %a, d_1.0
+	%t1 =d add %a, d_2.0
+	%t2 =d add %a, d_3.0
+	%t3 =d add %a, d_4.0
+	%t4 =d add %a, d_5.0
+	%t5 =d add %a, d_6.0
+	%t6 =d add %a, d_7.0
+	%t7 =d add %a, d_8.0
+	%s0 =d add %t0, %t1
+	%s1 =d add %t2, %t3
+	%s2 =d add %t4, %t5
+	%s3 =d add %t6, %t7
+	%r0 =d add %s0, %s1
+	%r1 =d add %s2, %s3
+	%r =d add %r0, %r1
+	ret %r
+}
+
+# >>> driver
+# extern double clobber(double);
+# int main(void) {
+# 	double marker = 42.0, got;
+# 	__asm__ volatile ("movsd %0, %%xmm6" : : "m"(marker) : "xmm6");
+# 	clobber(1.0);
+# 	__asm__ volatile ("movsd %%xmm6, %0" : "=m"(got));
+# 	return !(got == 42.0);
+# }
+# <<<

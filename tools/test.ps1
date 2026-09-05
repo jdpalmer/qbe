@@ -24,9 +24,11 @@ function Write-Section([string]$Name, [string]$File, [string]$Dest) {
 		if ($line -match "^# >>> $Name\b") { $on = $true; continue }
 		if ($on -and $line -match '^# <<<') { break }
 		if ($on) {
-			if ($line.StartsWith('# ')) { [void]$buf.Add($line.Substring(2)) }
-			elseif ($line -eq '#') { [void]$buf.Add('') }
-			else { [void]$buf.Add($line) }
+			$t = $line
+			if ($t.StartsWith('# ')) { $t = $t.Substring(2) }
+			elseif ($t -eq '#') { $t = '' }
+			if ($t.EndsWith('#')) { $t = $t.Substring(0, $t.Length - 1) }
+			[void]$buf.Add($t)
 		}
 	}
 	[System.IO.File]::WriteAllLines($Dest, $buf.ToArray(), $Utf8)

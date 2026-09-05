@@ -8,6 +8,7 @@ struct E {
 	Fn *fn;
 	int fp;
 	uint64_t fsz;
+	uint64_t xmmb; /* -xmmb(%rbp) is first XMM save; 0 if none */
 	int nclob;
 };
 
@@ -764,10 +765,23 @@ amd64_sysv_emitfn(Fn *fn, FILE *f)
 		elf_emitfnfin(fn->name, f);
 }
 
+static int
+winabi_nxmm(Fn *fn)
+{
+	int n, *r;
+
+	n = 0;
+	for (r=amd64_winabi_xmclob; *r>=0; r++)
+		if (fn->reg & BIT(*r))
+			n++;
+	return n;
+}
+
 static void
 winabi_framesz(E *e)
 {
 	uint64_t i, o, f;
+	int nxmm;
 
 	/* specific to NAlign == 3 */
 	o = 0;
@@ -782,7 +796,30 @@ winabi_framesz(E *e)
 	&& e->fp == RSP
 	&& e->fn->salign == 4)
 		f += 2;
-	e->fsz = 4*f + 8*o;
+	nxmm = winabi_nxmm(e->fn);
+	/* locals, then 16-byte XMM saves, then 8*o pad for rsp align */
+	e->fsz = 4*f + 16*nxmm + 8*o;
+	e->xmmb = nxmm ? 4*f + 16*nxmm : 0;
+}
+
+static void
+winabi_xmm_save(E *e, int restore)
+{
+	uint64_t off;
+	int *r, n;
+
+	off = 0;
+	for (r=amd64_winabi_xmclob; *r>=0; r++)
+		if (e->fn->reg & BIT(*r)) {
+			n = *r - XMM0;
+			if (restore)
+				fprintf(e->f, "\tmovaps -%"PRIu64"(%%rbp), %%xmm%d\n",
+					e->xmmb - off, n);
+			else
+				fprintf(e->f, "\tmovaps %%xmm%d, -%"PRIu64"(%%rbp)\n",
+					n, e->xmmb - off);
+			off += 16;
+		}
 }
 
 void
@@ -796,7 +833,7 @@ amd64_winabi_emitfn(Fn *fn, FILE *f)
 	static int id0;
 	Blk *b, *s;
 	Ins *i, itmp;
-	int *r, c, n, lbl;
+	int *r, c, n, lbl, nxmm;
 	E *e;
 
 	e = &(E){.f = f, .fn = fn};
@@ -808,7 +845,8 @@ amd64_winabi_emitfn(Fn *fn, FILE *f)
 		fprintf(f, "\tmovq %%r8, 0x18(%%rsp)\n");
 		fprintf(f, "\tmovq %%r9, 0x20(%%rsp)\n");
 	}
-	if (!fn->leaf || fn->vararg || fn->dynalloc) {
+	nxmm = winabi_nxmm(fn);
+	if (!fn->leaf || fn->vararg || fn->dynalloc || nxmm) {
 		e->fp = RBP;
 		fputs("\tpushq %rbp\n\tmovq %rsp, %rbp\n", f);
 	} else
@@ -822,6 +860,8 @@ amd64_winabi_emitfn(Fn *fn, FILE *f)
 			emitf("pushq %L0", &itmp, e);
 			e->nclob++;
 		}
+	if (nxmm)
+		winabi_xmm_save(e, 0);
 
 	for (lbl=0, b=fn->start; b; b=b->link) {
 		if (lbl || b->npred > 1)
@@ -839,6 +879,8 @@ amd64_winabi_emitfn(Fn *fn, FILE *f)
 					"\tmovq %%rbp, %%rsp\n"
 					"\tsubq $%"PRIu64", %%rsp\n",
 					e->fsz + e->nclob * 8);
+			if (nxmm)
+				winabi_xmm_save(e, 1);
 			for (r=&amd64_winabi_rclob[NCLR_WIN]; r>amd64_winabi_rclob;)
 				if (fn->reg & BIT(*--r)) {
 					itmp.arg[0] = TMP(*r);

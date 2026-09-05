@@ -46,8 +46,10 @@ enum Amd64Reg {
 	NGPS_SYSV = R11 - RAX + 1,
 	NCLR_SYSV = R15 - RBX + 1,
 
-	NGPS_WIN = R11 - RAX + 1 - 2,  /* -2 for RDI/RDI */
-	NCLR_WIN = R15 - RBX + 1 + 2,  /* +2 for RDI/RDI */
+	NGPS_WIN = R11 - RAX + 1 - 2,  /* -2 for RSI/RDI */
+	NCLR_WIN = R15 - RBX + 1 + 2,  /* +2 for RSI/RDI */
+	NFPS_WIN = XMM5 - XMM0 + 1,     /* XMM0-5 volatile */
+	NXCLR_WIN = XMM14 - XMM6 + 1,   /* XMM6-14 nonvolatile */
 };
 MAKESURE(reg_not_tmp, XMM15 < (int)Tmp0);
 
@@ -70,6 +72,7 @@ void amd64_sysv_abi(Fn *);
 /* winabi.c */
 extern int amd64_winabi_rsave[];
 extern int amd64_winabi_rclob[];
+extern int amd64_winabi_xmclob[];
 bits amd64_winabi_retregs(Ref, int[2]);
 bits amd64_winabi_argregs(Ref, int[2]);
 void amd64_winabi_abi(Fn *);
