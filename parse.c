@@ -187,7 +187,7 @@ err(char *s, ...)
 }
 
 static void
-lexinit()
+lexinit(void)
 {
 	static int done;
 	int i;
@@ -209,7 +209,7 @@ lexinit()
 }
 
 static int64_t
-getint()
+getint(void)
 {
 	uint64_t n;
 	int c, m;
@@ -233,7 +233,7 @@ getint()
 }
 
 static int
-lex()
+lex(void)
 {
 	int c, i, esc;
 	int t;
@@ -339,7 +339,7 @@ Alpha:
 }
 
 static int
-peek()
+peek(void)
 {
 	if (thead == Txxx)
 		thead = lex();
@@ -347,7 +347,7 @@ peek()
 }
 
 static int
-next()
+next(void)
 {
 	int t;
 
@@ -357,7 +357,7 @@ next()
 }
 
 static int
-nextnl()
+nextnl(void)
 {
 	int t;
 
@@ -393,7 +393,7 @@ expect(int t)
 }
 
 static Ref
-tmpref()
+tmpref(void)
 {
 	int t, i;
 
@@ -422,7 +422,7 @@ tmpref()
 }
 
 static Ref
-parseref()
+parseref(void)
 {
 	Con c;
 	int tok;
@@ -579,7 +579,7 @@ parserefl(int arg)
 }
 
 static Blk *
-findblk()
+findblk(void)
 {
 	Blk *b;
 	uint32_t h;
@@ -597,7 +597,7 @@ findblk()
 }
 
 static void
-closeblk()
+closeblk(void)
 {
 	idup(curb, insb, curi-insb);
 	blink = &curb->link;
@@ -1028,7 +1028,7 @@ parsefields(Field *fld, Typ *ty, int t)
 }
 
 static void
-parsetyp()
+parsetyp(void)
 {
 	Typ *ty;
 	int t, al;

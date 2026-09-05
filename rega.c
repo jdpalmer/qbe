@@ -251,7 +251,7 @@ pmrec(enum PMStat *status, int i, int *k)
 }
 
 static void
-pmgen()
+pmgen(void)
 {
 	int i;
 	enum PMStat *status;
