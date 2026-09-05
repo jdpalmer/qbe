@@ -124,6 +124,7 @@ usewidthle(Fn *fn, Ref r, int w)
 	return visit(fn, r, w, uwl);
 }
 
+#undef min
 static int
 min(int v1, int v2)
 {
