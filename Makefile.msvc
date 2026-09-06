@@ -1,0 +1,74 @@
+# nmake /f Makefile.msvc
+# Requires clang and nmake on PATH (e.g. LLVM + VS developer prompt).
+
+.SUFFIXES: .obj .c
+
+PREFIX = .
+BINDIR = $(PREFIX)\bin
+
+COMMOBJ  = main.obj util.obj parse.obj abi.obj cfg.obj mem.obj ssa.obj \
+           alias.obj load.obj copy.obj fold.obj gvn.obj gcm.obj simpl.obj \
+           ifopt.obj live.obj spill.obj rega.obj emit.obj getopt.obj
+AMD64OBJ = amd64\targ.obj amd64\sysv.obj amd64\isel.obj amd64\emit.obj \
+           amd64\winabi.obj
+ARM64OBJ = arm64\targ.obj arm64\abi.obj arm64\isel.obj arm64\emit.obj
+RV64OBJ  = rv64\targ.obj rv64\abi.obj rv64\isel.obj rv64\emit.obj
+OBJ      = $(COMMOBJ) $(AMD64OBJ) $(ARM64OBJ) $(RV64OBJ)
+
+CC       = clang
+CFLAGS   = -std=c99 -g -Wall -Wextra -Wpedantic -I. -D_CRT_SECURE_NO_WARNINGS
+LDFLAGS  =
+
+qbe.exe: $(OBJ)
+	$(CC) $(LDFLAGS) $(OBJ) -o $@
+
+.c.obj:
+	$(CC) $(CFLAGS) -c $< -o $@
+
+{amd64\}.c{amd64\}.obj:
+	$(CC) $(CFLAGS) -c $< -o $@
+
+{arm64\}.c{arm64\}.obj:
+	$(CC) $(CFLAGS) -c $< -o $@
+
+{rv64\}.c{rv64\}.obj:
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(OBJ): all.h ops.h
+$(AMD64OBJ): amd64\all.h
+$(ARM64OBJ): arm64\all.h
+$(RV64OBJ): rv64\all.h
+main.obj: config.h
+getopt.obj: getopt.h
+
+config.h:
+	@echo #define Deftgt T_amd64_win> $@
+
+install: qbe.exe
+	if not exist "$(BINDIR)" mkdir "$(BINDIR)"
+	copy /y qbe.exe "$(BINDIR)\qbe.exe"
+
+uninstall:
+	-del /q "$(BINDIR)\qbe.exe"
+
+clean:
+	-del /q *.obj amd64\*.obj arm64\*.obj rv64\*.obj qbe.exe *.pdb *.ilk 2>nul
+
+clean-gen: clean
+	-del /q config.h 2>nul
+
+check: qbe.exe
+	powershell -NoProfile -ExecutionPolicy Bypass -File tools\test.ps1 all
+
+check-amd64_win: qbe.exe
+	powershell -NoProfile -ExecutionPolicy Bypass -File tools\test.ps1 all
+
+# Cross-target suites still need a POSIX shell (tools/test.sh).
+check-x86_64: qbe.exe
+	set TARGET=x86_64&& sh tools\test.sh all
+
+check-arm64: qbe.exe
+	set TARGET=arm64&& sh tools\test.sh all
+
+check-rv64: qbe.exe
+	set TARGET=rv64&& sh tools\test.sh all
