@@ -311,7 +311,7 @@ static Ins* lower_call(Fn* func,
       if (arg->align > 4) {
         err("win abi cannot pass alignments > 16");
       }
-      stack_usage += arg->size;
+      stack_usage += 8;
     } else if (arg->style == APS_CopyAndPointerOnStack) {
       stack_usage += 8;
     }
@@ -429,7 +429,7 @@ static Ins* lower_call(Fn* func,
           emit(Ostorel, 0, R, instr->arg[0], slot);
         }
         emit(Oadd, Kl, slot, arg_stack_slots, getcon(slot_offset, func));
-        slot_offset += arg->size;
+        slot_offset += 8;
         break;
       }
       case APS_CopyAndPointerInRegister:

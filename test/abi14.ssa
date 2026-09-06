@@ -1,0 +1,25 @@
+# skip amd64_sysv amd64_apple arm64 arm64_apple rv64 x86_64
+# win64: two 4-byte structs on the stack must each take an 8-byte
+# slot; storel of the first must not overwrite the second
+
+type :sw = { w }
+
+export
+function w $test() {
+@start
+	%a =l alloc4 4
+	%b =l alloc4 4
+	storew 10, %a
+	storew 20, %b
+	%r =w call $cfn(w 1, w 2, w 3, w 4, :sw %a, :sw %b)
+	ret %r
+}
+
+# >>> driver
+# typedef struct { int x; } sw;
+# extern int test(void);
+# int cfn(int a0, int a1, int a2, int a3, sw s, sw t) {
+# 	return s.x + t.x;
+# }
+# int main(void) { return !(test() == 30); }
+# <<<

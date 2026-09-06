@@ -1,0 +1,22 @@
+# skip amd64_sysv amd64_apple arm64 arm64_apple rv64 x86_64
+# win64: stack args are 8-byte slots; a 4-byte struct must not pack tight
+
+type :sw = { w }
+
+export
+function w $test() {
+@start
+	%s =l alloc4 4
+	storew 10, %s
+	%r =w call $cfn(w 1, w 2, w 3, w 4, :sw %s, w 5)
+	ret %r
+}
+
+# >>> driver
+# typedef struct { int x; } sw;
+# extern int test(void);
+# int cfn(int a0, int a1, int a2, int a3, sw s, int a5) {
+# 	return s.x + a5;
+# }
+# int main(void) { return !(test() == 15); }
+# <<<
