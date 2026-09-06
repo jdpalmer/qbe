@@ -248,6 +248,45 @@ static bool is_integer_type(int ty) {
   return KBASE(ty) == 0;
 }
 
+/* Exact-width load/store for small structs passed as integers (1/2/4/8). */
+static int
+loadop_size(uint size, int *cls)
+{
+  switch (size) {
+  case 1:
+    *cls = Kw;
+    return Oloadub;
+  case 2:
+    *cls = Kw;
+    return Oloaduh;
+  case 4:
+    *cls = Kw;
+    return Oloaduw;
+  case 8:
+    *cls = Kl;
+    return Oload;
+  default:
+    die("unreachable");
+  }
+}
+
+static int
+storeop_size(uint size)
+{
+  switch (size) {
+  case 1:
+    return Ostoreb;
+  case 2:
+    return Ostoreh;
+  case 4:
+    return Ostorew;
+  case 8:
+    return Ostorel;
+  default:
+    die("unreachable");
+  }
+}
+
 static Ref register_for_arg(int cls, int counter) {
   assert(counter < 4);
   if (is_integer_type(cls)) {
@@ -347,8 +386,9 @@ static Ins* lower_call(Fn* func,
       return_copy->link = (*pextra_alloc);
       *pextra_alloc = return_copy;
       Ref copy = newtmp("abi.copy", Kl, func);
-      emit(Ostorel, 0, R, copy, call_instr->to);
-      emit(Ocopy, Kl, copy, TMP(RAX), R);
+      int rcls = ret_arg_class.size <= 4 ? Kw : Kl;
+      emit(storeop_size(ret_arg_class.size), 0, R, copy, call_instr->to);
+      emit(Ocopy, rcls, copy, TMP(RAX), R);
       reg_usage.rax_returned = true;
     } else if (is_integer_type(call_instr->cls)) {
       // Only a basic type returned from the call, integer.
@@ -404,10 +444,10 @@ static Ins* lower_call(Fn* func,
       case APS_Register: {
         Ref into = register_for_arg(arg->cls, reg_counter++);
         if (instr->op == Oargc) {
-          // If this is a small struct being passed by value. The value in the
-          // instruction in this case is a pointer, but it needs to be loaded
-          // into the register.
-          emit(Oload, arg->cls, into, instr->arg[1], R);
+          // Small struct by value: IL has a pointer; load exact size.
+          int lcls;
+          int lop = loadop_size(arg->size, &lcls);
+          emit(lop, lcls, into, instr->arg[1], R);
         } else {
           // Otherwise, a normal value passed in a register.
           emit(Ocopy, instr->cls, into, instr->arg[0], R);
@@ -417,13 +457,13 @@ static Ins* lower_call(Fn* func,
       case APS_InlineOnStack: {
         Ref slot = newtmp("abi.off", Kl, func);
         if (instr->op == Oargc) {
-          // This is a small struct, so it's not passed by copy, but the
-          // instruction is a pointer. So we need to copy it into the stack
-          // slot. (And, remember that these are emitted backwards, so store,
-          // then load.)
-          Ref smalltmp = newtmp("abi.smalltmp", arg->cls, func);
+          // Exact-size load, then spill the (zero-extended) value into the
+          // full 8-byte stack slot.
+          int lcls;
+          int lop = loadop_size(arg->size, &lcls);
+          Ref smalltmp = newtmp("abi.smalltmp", lcls, func);
           emit(Ostorel, 0, R, smalltmp, slot);
-          emit(Oload, arg->cls, smalltmp, instr->arg[1], R);
+          emit(lop, lcls, smalltmp, instr->arg[1], R);
         } else {
           // Stash the value into the stack slot.
           emit(Ostorel, 0, R, instr->arg[0], slot);
@@ -504,7 +544,9 @@ static void lower_block_return(Fn* func, Blk* block) {
       emit(Oblit1, 0, R, INT(type->size), R);
       emit(Oblit0, 0, R, ret_arg, func->retr);
     } else {
-      emit(Oload, Kl, TMP(RAX), ret_arg, R);
+      int lcls;
+      int lop = loadop_size(type->size, &lcls);
+      emit(lop, lcls, TMP(RAX), ret_arg, R);
     }
     reg_usage.rax_returned = true;
   } else {
@@ -661,9 +703,9 @@ static RegisterUsage lower_func_parameters(Fn* func) {
         // If it's a struct at the IL level, we need to copy the register into
         // an alloca so we have something to point at (same for InlineOnStack).
         if (instr->op == Oparc) {
-          arg->ref = newtmp("abi", Kl, func);
-          emit(Ostorel, 0, R, arg->ref, instr->to);
-          emit(Ocopy, instr->cls, arg->ref, from, R);
+          arg->ref = newtmp("abi", arg->cls, func);
+          emit(storeop_size(arg->size), 0, R, arg->ref, instr->to);
+          emit(Ocopy, arg->cls, arg->ref, from, R);
           emit(Oalloc8, Kl, instr->to, getcon(arg->size, func), R);
         } else {
           emit(Ocopy, instr->cls, instr->to, from, R);
@@ -672,9 +714,9 @@ static RegisterUsage lower_func_parameters(Fn* func) {
       }
       case APS_InlineOnStack:
         if (instr->op == Oparc) {
-          arg->ref = newtmp("abi", Kl, func);
-          emit(Ostorel, 0, R, arg->ref, instr->to);
-          emit(Ocopy, instr->cls, arg->ref, SLOT(-slot_offset), R);
+          arg->ref = newtmp("abi", arg->cls, func);
+          emit(storeop_size(arg->size), 0, R, arg->ref, instr->to);
+          emit(Ocopy, arg->cls, arg->ref, SLOT(-slot_offset), R);
           emit(Oalloc8, Kl, instr->to, getcon(arg->size, func), R);
         } else {
           emit(Ocopy, Kl, instr->to, SLOT(-slot_offset), R);

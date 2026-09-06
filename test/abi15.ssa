@@ -1,0 +1,95 @@
+# skip amd64_sysv amd64_apple arm64 arm64_apple rv64 x86_64
+# win64: small structs (1/2/4) load/store exact width
+
+type :sb = { b }
+type :sh = { h }
+type :sw = { w }
+
+export
+function :sb $retsb(:sb %p) {
+@start
+	ret %p
+}
+
+export
+function :sh $retsh(:sh %p) {
+@start
+	ret %p
+}
+
+export
+function w $addsb(:sb %a, :sb %b) {
+@start
+	%x =w loadub %a
+	%y =w loadub %b
+	%r =w add %x, %y
+	ret %r
+}
+
+export
+function w $addsh(:sh %a, :sh %b) {
+@start
+	%x =w loaduh %a
+	%y =w loaduh %b
+	%r =w add %x, %y
+	ret %r
+}
+
+export
+function w $addsw(:sw %a, :sw %b) {
+@start
+	%x =w loadw %a
+	%y =w loadw %b
+	%r =w add %x, %y
+	ret %r
+}
+
+export
+function w $test() {
+@start
+	%ab =l alloc4 1
+	%bb =l alloc4 1
+	storeb 3, %ab
+	storeb 4, %bb
+	%s0 =:sb call $retsb(:sb %ab)
+	%v0 =w loadub %s0
+	%sumb =w call $addsb(:sb %ab, :sb %bb)
+
+	%ah =l alloc4 2
+	%bh =l alloc4 2
+	storeh 10, %ah
+	storeh 20, %bh
+	%s1 =:sh call $retsh(:sh %ah)
+	%v1 =w loaduh %s1
+	%sumh =w call $addsh(:sh %ah, :sh %bh)
+
+	%aw =l alloc4 4
+	%bw =l alloc4 4
+	storew 100, %aw
+	storew 200, %bw
+	%sumw =w call $addsw(:sw %aw, :sw %bw)
+
+	%c0 =w ceqw %v0, 3
+	%c1 =w ceqw %sumb, 7
+	%c2 =w ceqw %v1, 10
+	%c3 =w ceqw %sumh, 30
+	%c4 =w ceqw %sumw, 300
+	%r0 =w and %c0, %c1
+	%r1 =w and %c2, %c3
+	%r2 =w and %r0, %r1
+	%r =w and %r2, %c4
+	ret %r
+}
+
+# >>> driver
+# typedef struct { unsigned char x; } sb;
+# typedef struct { unsigned short x; } sh;
+# typedef struct { unsigned int x; } sw;
+# extern sb retsb(sb);
+# extern sh retsh(sh);
+# extern int addsb(sb, sb);
+# extern int addsh(sh, sh);
+# extern int addsw(sw, sw);
+# extern int test(void);
+# int main(void) { return !(test() == 1); }
+# <<<
