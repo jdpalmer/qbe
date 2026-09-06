@@ -59,12 +59,11 @@ bits amd64_winabi_retregs(Ref r, int p[2]) {
 
   bits b = 0;
   int num_int_returns = r.val & 1;
-  int num_float_returns = r.val & 2;
-  if (num_int_returns == 1) {
+  int num_float_returns = (r.val >> 1) & 1;
+  if (num_int_returns)
     b |= BIT(RAX);
-  } else {
+  if (num_float_returns)
     b |= BIT(XMM0);
-  }
   if (p) {
     p[0] = num_int_returns;
     p[1] = num_float_returns;

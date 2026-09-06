@@ -1,0 +1,19 @@
+# skip amd64_sysv amd64_apple arm64 arm64_apple rv64 x86_64
+# win64: void calls must not define a return reg; a float live across
+# a void call that clobbers XMM0 must be preserved
+
+export
+function d $keep(d %x) {
+@start
+	%y =d mul %x, %x
+	call $clobberxmm0()
+	ret %y
+}
+
+# >>> driver
+# extern double keep(double);
+# void clobberxmm0(void) {
+# 	__asm__ volatile ("xorps %%xmm0, %%xmm0" ::: "xmm0");
+# }
+# int main(void) { return !(keep(3.0) == 9.0); }
+# <<<
