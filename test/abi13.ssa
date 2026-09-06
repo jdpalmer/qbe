@@ -1,0 +1,22 @@
+# skip amd64_sysv amd64_apple arm64 arm64_apple rv64 x86_64
+# win64: by-ref aggregate temps must be 16-byte aligned
+
+type :big = { b 17 }
+
+export
+function w $test() {
+@start
+	%p =l alloc4 17
+	storeb 65, %p
+	%r =w call $cfn(:big %p)
+	ret %r
+}
+
+# >>> driver
+# typedef struct { char t[17]; } big;
+# extern int test(void);
+# int cfn(big x) {
+# 	return ((unsigned long long)&x & 15) == 0;
+# }
+# int main(void) { return !(test() == 1); }
+# <<<

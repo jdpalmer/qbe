@@ -330,7 +330,7 @@ static Ins* lower_call(Fn* func,
     return_pad = alloc(sizeof(ExtraAlloc));
     Ref ret_pad_ref = newtmp("abi.ret_pad", Kl, func);
     return_pad->instr =
-        (Ins){Oalloc8, Kl, ret_pad_ref, {getcon(ret_arg_class.size, func)}};
+        (Ins){Oalloc16, Kl, ret_pad_ref, {getcon(ret_arg_class.size, func)}};
     return_pad->link = (*pextra_alloc);
     *pextra_alloc = return_pad;
     reg_usage.rax_returned = true;
@@ -439,7 +439,7 @@ static Ins* lower_call(Fn* func,
         ExtraAlloc* arg_copy = alloc(sizeof(ExtraAlloc));
         Ref copy_ref = newtmp("abi.copy", Kl, func);
         arg_copy->instr =
-            (Ins){Oalloc8, Kl, copy_ref, {getcon(arg->size, func)}};
+            (Ins){Oalloc16, Kl, copy_ref, {getcon(arg->size, func)}};
         arg_copy->link = (*pextra_alloc);
         *pextra_alloc = arg_copy;
         emit(Oblit1, 0, R, INT(arg->size), R);
