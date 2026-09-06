@@ -1,0 +1,47 @@
+# skip amd64_sysv amd64_apple arm64 arm64_apple rv64 x86_64
+# win64: extern uses PE __imp_ import slots
+
+export
+function w $callf() {
+@start
+	%v =w call extern $foreign()
+	ret %v
+}
+
+export
+function l $addrf() {
+@start
+	ret extern $foreign
+}
+
+export
+function w $loadg() {
+@start
+	%v =w loadw extern $g
+	ret %v
+}
+
+export
+function w $test() {
+@start
+	%v0 =w call $callf()
+	%p =l call $addrf()
+	%v1 =w call %p()
+	%v2 =w call $loadg()
+	%c0 =w ceqw %v0, 7
+	%c1 =w ceqw %v1, 7
+	%c2 =w ceqw %v2, 11
+	%r0 =w and %c0, %c1
+	%r =w and %r0, %c2
+	ret %r
+}
+
+# >>> driver
+# static int foreign(void) { return 7; }
+# static int g = 11;
+# /* Stubs matching PE dllimport slots referenced by amd64_win extern. */
+# int (*__imp_foreign)(void) = foreign;
+# int *__imp_g = &g;
+# extern int test(void);
+# int main(void) { return !(test() == 1); }
+# <<<

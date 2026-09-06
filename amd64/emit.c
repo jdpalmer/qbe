@@ -197,7 +197,7 @@ emitcon(Con *con, E *e)
 		l = str(con->sym.id);
 		p = l[0] == '"' ? "" : T.assym;
 		if (con->sym.type == SThr) {
-			assert(!T.apple);
+			assert(!T.apple && !T.windows);
 			fprintf(e->f, "%%fs:%s%s@tpoff", p, l);
 		} else {
 			assert((con->sym.type & ~SExt) == SGlo);
@@ -403,6 +403,35 @@ static bits negmask[4] = {
 	[Kd] = 0x8000000000000000,
 };
 
+static char *
+win_sympfx(char *sym)
+{
+	return sym[0] == '"' ? "" : T.assym;
+}
+
+static void
+win_tlsaddr(FILE *f, char *sym, int64_t off, int d)
+{
+	int scr;
+	char *pfx;
+
+	/* MSVC TLS: _tls_index + %gs:88 + @SECREL32
+	 * Same sequence for local and extern thread symbols. */
+	scr = d == R11 ? R10 : R11;
+	pfx = win_sympfx(sym);
+	fprintf(f, "\tpushq %%%s\n", regtoa(scr, SLong));
+	fprintf(f, "\tmovl _tls_index(%%rip), %%%s\n",
+		regtoa(scr, SWord));
+	fprintf(f, "\tmovq %%gs:88, %%%s\n", regtoa(d, SLong));
+	fprintf(f, "\tmovq (%%%s,%%%s,8), %%%s\n",
+		regtoa(d, SLong), regtoa(scr, SLong), regtoa(d, SLong));
+	fprintf(f, "\tpopq %%%s\n", regtoa(scr, SLong));
+	fprintf(f, "\tleaq %s%s@SECREL32", pfx, sym);
+	if (off)
+		fprintf(f, "%+"PRId64, off);
+	fprintf(f, "(%%%s), %%%s\n", regtoa(d, SLong), regtoa(d, SLong));
+}
+
 static void
 emitins(Ins i, E *e)
 {
@@ -545,8 +574,23 @@ emitins(Ins i, E *e)
 				regtoa(i.to.val, SLong));
 			break;
 		}
-		if (T.windows && con->sym.type != SGlo)
-			die("extern/thread unsupported on amd64_win");
+		if (T.windows) {
+			if (con->sym.type == SThr
+			|| con->sym.type == SExtThr) {
+				win_tlsaddr(e->f, sym, con->bits.i, i.to.val);
+				break;
+			}
+			if (con->sym.type == SExt) {
+				/* PE dllimport slot (like GOT) */
+				assert(!con->bits.i);
+				fprintf(e->f, "\tmovq __imp_%s%s(%%rip), %%%s\n",
+					win_sympfx(sym), sym,
+					regtoa(i.to.val, SLong));
+				break;
+			}
+			if (con->sym.type != SGlo)
+				die("unreachable");
+		}
 		switch (con->sym.type) {
 		case SThr:
 			/* derive the symbol address from the TCB
@@ -589,10 +633,20 @@ emitins(Ins i, E *e)
 		switch (rtype(i.arg[0])) {
 		case RCon:
 			con = &e->fn->con[i.arg[0].val];
+			if (T.windows
+			&& con->type == CAddr
+			&& con->sym.type == SExt) {
+				assert(!con->bits.i);
+				sym = str(con->sym.id);
+				fprintf(e->f,
+					"\tcallq *__imp_%s%s(%%rip)\n",
+					win_sympfx(sym), sym);
+				break;
+			}
 			fprintf(e->f, "\tcallq ");
 			emitcon(con, e);
 			if (con->type == CAddr
-			&& (con->sym.type & SExt)
+			&& con->sym.type == SExt
 			&& !T.apple)
 				fprintf(e->f, "@plt");
 			fprintf(e->f, "\n");

@@ -1,0 +1,21 @@
+# skip amd64_sysv amd64_apple arm64 arm64_apple rv64 x86_64
+# win64: local thread data load/store
+
+thread data $v = align 4 { w 42 }
+
+export
+function w $test() {
+@start
+	%a =w loadw thread $v
+	storew 99, thread $v
+	%b =w loadw thread $v
+	%c0 =w ceqw %a, 42
+	%c1 =w ceqw %b, 99
+	%r =w and %c0, %c1
+	ret %r
+}
+
+# >>> driver
+# extern int test(void);
+# int main(void) { return !(test() == 1); }
+# <<<

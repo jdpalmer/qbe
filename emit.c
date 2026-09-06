@@ -42,7 +42,9 @@ emitlnk(char *n, Lnk *l, int s, FILE *f)
 		fprintf(f, ".section %s", l->sec);
 		if (l->secf)
 			fprintf(f, ",%s", l->secf);
-	} else
+	} else if (T.windows && l->thread)
+		fputs(".section .tls$,\"dw\"", f);
+	else
 		fputs(sec[l->thread != 0][s], f);
 	fputc('\n', f);
 	if (l->align)

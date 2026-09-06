@@ -122,7 +122,7 @@ fixarg(Ref *r, int k, Ins *i, Fn *fn)
 	}
 	else if (op != Ocall && hascon(r0, &c, fn)
 	&& c->type == CAddr && ((c->sym.type & SExt)
-	 || (T.apple && c->sym.type == SThr))) {
+	 || ((T.apple || T.windows) && (c->sym.type & SThr)))) {
 		r1 = newtmp("isel", Kl, fn);
 		if (c->bits.i) {
 			r2 = newtmp("isel", Kl, fn);

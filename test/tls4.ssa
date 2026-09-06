@@ -1,0 +1,34 @@
+# skip amd64_sysv amd64_apple arm64 arm64_apple rv64 x86_64
+# win64: extern thread (TLS defined in another TU)
+
+export
+function w $loadev() {
+@start
+	%v =w loadw extern thread $ev
+	ret %v
+}
+
+export
+function l $addrev() {
+@start
+	ret extern thread $ev
+}
+
+export
+function w $test() {
+@start
+	%v0 =w call $loadev()
+	storew 99, extern thread $ev
+	%p =l call $addrev()
+	%v1 =w loadw %p
+	%c0 =w ceqw %v0, 7
+	%c1 =w ceqw %v1, 99
+	%r =w and %c0, %c1
+	ret %r
+}
+
+# >>> driver
+# __declspec(thread) int ev = 7;
+# extern int test(void);
+# int main(void) { return !(test() == 1); }
+# <<<

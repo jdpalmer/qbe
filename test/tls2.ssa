@@ -1,0 +1,58 @@
+# skip amd64_sysv amd64_apple arm64 arm64_apple rv64 x86_64
+# win64: address of thread data and constant/variable offsets
+
+thread data $x = { w 1, w 2, w 3, w 4 }
+
+export
+function l $xaddr() {
+@start
+	ret thread $x
+}
+
+export
+function l $xaddroff4() {
+@start
+	%a =l add 4, thread $x
+	ret %a
+}
+
+export
+function l $xaddroff(l %off) {
+@start
+	%a =l add thread $x, %off
+	ret %a
+}
+
+export
+function w $xvalcnt(l %cnt) {
+@start
+	%o =l mul 4, %cnt
+	%a =l add thread $x, %o
+	%x =w loadw %a
+	ret %x
+}
+
+export
+function w $test() {
+@start
+	%a0 =l call $xaddr()
+	%x0 =w loadw %a0
+	%a4 =l call $xaddroff4()
+	%x4 =w loadw %a4
+	%a8 =l call $xaddroff(l 8)
+	%x8 =w loadw %a8
+	%xc =w call $xvalcnt(l 3)
+	%c0 =w ceqw %x0, 1
+	%c1 =w ceqw %x4, 2
+	%c2 =w ceqw %x8, 3
+	%c3 =w ceqw %xc, 4
+	%r0 =w and %c0, %c1
+	%r1 =w and %c2, %c3
+	%r =w and %r0, %r1
+	ret %r
+}
+
+# >>> driver
+# extern int test(void);
+# int main(void) { return !(test() == 1); }
+# <<<
