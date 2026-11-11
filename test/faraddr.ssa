@@ -1,0 +1,19 @@
+# global + large constant offset must not be folded into
+# arm64 page/lo12 relocs (fixup/addend out of range)
+
+export
+function l $f() {
+@start
+	%p =l add $g, 16777216
+	ret %p
+}
+
+export data $g = { w 0 }
+
+# >>> driver
+# extern char *f(void);
+# extern char g;
+# int main(void) {
+# 	return f() != &g + 16777216;
+# }
+# <<<

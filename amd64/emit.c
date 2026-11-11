@@ -227,6 +227,25 @@ regtoa(int reg, int sz)
 		return rname[reg][sz];
 }
 
+static void
+addimm(int r, int64_t n, E *e)
+{
+	char *rn, *sn;
+	int sr;
+
+	if (!n)
+		return;
+	rn = regtoa(r, SLong);
+	if (n == (int32_t)n) {
+		fprintf(e->f, "\taddq $%"PRId64", %%%s\n", n, rn);
+		return;
+	}
+	sr = r != R11 ? R11 : R10;
+	sn = regtoa(sr, SLong);
+	fprintf(e->f, "\tmovabsq $%"PRId64", %%%s\n", n, sn);
+	fprintf(e->f, "\taddq %%%s, %%%s\n", sn, regtoa(r, SLong));
+}
+
 static Ref
 getarg(char c, Ins *i)
 {
@@ -410,7 +429,7 @@ win_sympfx(char *sym)
 }
 
 static void
-win_tlsaddr(FILE *f, char *sym, int64_t off, int d)
+win_tlsaddr(E *e, char *sym, int64_t off, int d)
 {
 	int scr;
 	char *pfx;
@@ -419,17 +438,17 @@ win_tlsaddr(FILE *f, char *sym, int64_t off, int d)
 	 * Same sequence for local and extern thread symbols. */
 	scr = d == R11 ? R10 : R11;
 	pfx = win_sympfx(sym);
-	fprintf(f, "\tpushq %%%s\n", regtoa(scr, SLong));
-	fprintf(f, "\tmovl _tls_index(%%rip), %%%s\n",
+	fprintf(e->f, "\tpushq %%%s\n", regtoa(scr, SLong));
+	fprintf(e->f, "\tmovl _tls_index(%%rip), %%%s\n",
 		regtoa(scr, SWord));
-	fprintf(f, "\tmovq %%gs:88, %%%s\n", regtoa(d, SLong));
-	fprintf(f, "\tmovq (%%%s,%%%s,8), %%%s\n",
+	fprintf(e->f, "\tmovq %%gs:88, %%%s\n", regtoa(d, SLong));
+	fprintf(e->f, "\tmovq (%%%s,%%%s,8), %%%s\n",
 		regtoa(d, SLong), regtoa(scr, SLong), regtoa(d, SLong));
-	fprintf(f, "\tpopq %%%s\n", regtoa(scr, SLong));
-	fprintf(f, "\tleaq %s%s@SECREL32", pfx, sym);
+	fprintf(e->f, "\tpopq %%%s\n", regtoa(scr, SLong));
+	fprintf(e->f, "\tleaq %s%s@SECREL32(%%%s), %%%s\n",
+		pfx, sym, regtoa(d, SLong), regtoa(d, SLong));
 	if (off)
-		fprintf(f, "%+"PRId64, off);
-	fprintf(f, "(%%%s), %%%s\n", regtoa(d, SLong), regtoa(d, SLong));
+		addimm(d, off, e);
 }
 
 static void
@@ -546,7 +565,8 @@ emitins(Ins i, E *e)
 		if (isreg(i.to)
 		&& t0 == RCon
 		&& e->fn->con[i.arg[0].val].type == CAddr) {
-			emitf("lea%k %M0, %=", &i, e);
+			i.op = Oaddr;
+			emitins(i, e);
 			break;
 		}
 		if (rtype(i.to) == RSlot
@@ -577,7 +597,7 @@ emitins(Ins i, E *e)
 		if (T.windows) {
 			if (con->sym.type == SThr
 			|| con->sym.type == SExtThr) {
-				win_tlsaddr(e->f, sym, con->bits.i, i.to.val);
+				win_tlsaddr(e, sym, con->bits.i, i.to.val);
 				break;
 			}
 			if (con->sym.type == SExt) {
@@ -596,14 +616,12 @@ emitins(Ins i, E *e)
 			/* derive the symbol address from the TCB
 			 * address at offset 0 of %fs */
 			emitf("movq %%fs:0, %L=", &i, e);
-			fprintf(e->f, "\tleaq %s%s@tpoff",
-				sym[0] == '"' ? "" : T.assym, sym);
-			if (con->bits.i)
-				fprintf(e->f, "%+"PRId64,
-					con->bits.i);
-			fprintf(e->f, "(%%%s), %%%s\n",
+			fprintf(e->f, "\tleaq %s%s@tpoff(%%%s), %%%s\n",
+				sym[0] == '"' ? "" : T.assym, sym,
 				regtoa(i.to.val, SLong),
 				regtoa(i.to.val, SLong));
+			if (con->bits.i)
+				addimm(i.to.val, con->bits.i, e);
 			break;
 		case SExtThr:
 			/* initial-exec TLS: load offset from
@@ -624,7 +642,14 @@ emitins(Ins i, E *e)
 				regtoa(i.to.val, SLong));
 			break;
 		default:
-			goto Table;
+			/* SGlo: do not fold offset into the rip
+			 * reloc; add it after the lea */
+			fprintf(e->f, "\tleaq %s%s(%%rip), %%%s\n",
+				sym[0] == '"' ? "" : T.assym, sym,
+				regtoa(i.to.val, SLong));
+			if (con->bits.i)
+				addimm(i.to.val, con->bits.i, e);
+			break;
 		}
 		break;
 	case Ocall:

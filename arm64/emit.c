@@ -262,21 +262,66 @@ emitf(char *s, Ins *i, E *e)
 	}
 }
 
-static void
-loadaddr(Con *c, char *rn, E *e)
-{
-	char *p, *l, *s;
+static void loadcon(Con *, int, int, E *);
 
+static void
+addimm(int r, int64_t n, E *e)
+{
+	char *op, rb[8], sb[8];
+	uint64_t u;
+	int sr;
+	Con c;
+
+	if (!n)
+		return;
+	memcpy(rb, rname(r, Kl), 4);
+	if (n < 0) {
+		op = "sub";
+		u = -(uint64_t)n;
+	} else {
+		op = "add";
+		u = n;
+	}
+	if ((u & 0xfffull) == u) {
+		fprintf(e->f, "\t%s\t%s, %s, #%"PRIu64"\n",
+			op, rb, rb, u);
+		return;
+	}
+	if ((u & 0xfff000ull) == u) {
+		fprintf(e->f, "\t%s\t%s, %s, #%"PRIu64", lsl #12\n",
+			op, rb, rb, u >> 12);
+		return;
+	}
+	if ((u & 0xffffffull) == u) {
+		fprintf(e->f, "\t%s\t%s, %s, #%"PRIu64"\n",
+			op, rb, rb, u & 0xfffull);
+		fprintf(e->f, "\t%s\t%s, %s, #%"PRIu64", lsl #12\n",
+			op, rb, rb, u >> 12);
+		return;
+	}
+	sr = r != IP1 ? IP1 : (T.apple ? IP0 : R18);
+	c = (Con){.type = CBits, .bits.i = n};
+	loadcon(&c, sr, Kl, e);
+	memcpy(sb, rname(sr, Kl), 4);
+	fprintf(e->f, "\tadd\t%s, %s, %s\n", rb, rb, sb);
+}
+
+static void
+loadaddr(Con *c, int r, E *e)
+{
+	char *p, *l, *s, *rn;
+
+	rn = rname(r, Kl);
 	switch (c->sym.type) {
 	default:
 		die("unreachable");
 	case SGlo:
 		if (T.apple)
-			s = "\tadrp\tR, S@pageO\n"
-			    "\tadd\tR, R, S@pageoffO\n";
+			s = "\tadrp\tR, S@page\n"
+			    "\tadd\tR, R, S@pageoff\n";
 		else
-			s = "\tadrp\tR, SO\n"
-			    "\tadd\tR, R, #:lo12:SO\n";
+			s = "\tadrp\tR, S\n"
+			    "\tadd\tR, R, #:lo12:S\n";
 		break;
 	case SExtThr:
 		if (!T.apple)
@@ -288,8 +333,8 @@ loadaddr(Con *c, char *rn, E *e)
 			    "\tldr\tR, [R, S@tlvppageoff]\n";
 		else
 			s = "\tmrs\tR, tpidr_el0\n"
-			    "\tadd\tR, R, #:tprel_hi12:SO, lsl #12\n"
-			    "\tadd\tR, R, #:tprel_lo12_nc:SO\n";
+			    "\tadd\tR, R, #:tprel_hi12:S, lsl #12\n"
+			    "\tadd\tR, R, #:tprel_lo12_nc:S\n";
 		break;
 	case SExt:
 		assert(c->bits.i == 0);
@@ -316,12 +361,9 @@ loadaddr(Con *c, char *rn, E *e)
 			fputs(p, e->f);
 			fputs(l, e->f);
 			break;
-		case 'O':
-			if (c->bits.i)
-				/* todo, handle large offsets */
-				fprintf(e->f, "+%"PRIi64, c->bits.i);
-			break;
 		}
+	if (c->bits.i)
+		addimm(r, c->bits.i, e);
 }
 
 static void
@@ -335,8 +377,7 @@ loadcon(Con *c, int r, int k, E *e)
 	rn = rname(r, k);
 	n = c->bits.i;
 	if (c->type == CAddr) {
-		rn = rname(r, Kl);
-		loadaddr(c, rn, e);
+		loadaddr(c, r, e);
 		return;
 	}
 	assert(c->type == CBits);

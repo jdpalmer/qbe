@@ -132,13 +132,31 @@ static void
 emitaddr(Con *c, FILE *f)
 {
 	assert((c->sym.type & ~SExt) == SGlo);
+	assert(c->bits.i == 0 || !(c->sym.type & SExt));
 	fputs(str(c->sym.id), f);
-	if (c->bits.i) {
-		/* TODO: fix isel to ensure no offset for SGlo */
-		if (c->sym.type & SExt)
-			die("extern with offset is not supported");
-		fprintf(f, "+%"PRIi64, c->bits.i);
+}
+
+static void
+addimm(char *rn, int64_t n, FILE *f)
+{
+	if (!n)
+		return;
+	if (n >= -2048 && n < 2048) {
+		fprintf(f, "\taddi %s, %s, %"PRId64"\n", rn, rn, n);
+		return;
 	}
+	if (strcmp(rn, "t6") != 0) {
+		fprintf(f, "\tli t6, %"PRId64"\n", n);
+		fprintf(f, "\tadd %s, %s, t6\n", rn, rn);
+		return;
+	}
+	/* address is in t6; spill t5 to materialize the offset */
+	fprintf(f, "\taddi sp, sp, -16\n");
+	fprintf(f, "\tsd t5, 0(sp)\n");
+	fprintf(f, "\tli t5, %"PRId64"\n", n);
+	fprintf(f, "\tadd t6, t6, t5\n");
+	fprintf(f, "\tld t5, 0(sp)\n");
+	fprintf(f, "\taddi sp, sp, 16\n");
 }
 
 static void
@@ -233,30 +251,30 @@ emitf(char *s, Ins *i, Fn *fn, FILE *f)
 static void
 loadaddr(Con *c, char *rn, FILE *f)
 {
-	char off[32];
+	Con base;
 
 	switch (c->sym.type) {
 	case SGlo:
 	case SExt:
+		base = *c;
+		base.bits.i = 0;
 		fprintf(f, "\t%s %s, ", c->sym.type == SExt ? "lga" : "lla", rn);
-		emitaddr(c, f);
+		emitaddr(&base, f);
 		fputc('\n', f);
 		break;
 	case SThr:
-		if (c->bits.i)
-			sprintf(off, "+%"PRIi64, c->bits.i);
-		else
-			off[0] = 0;
-		fprintf(f, "\tlui %s, %%tprel_hi(%s)%s\n",
-			rn, str(c->sym.id), off);
-		fprintf(f, "\tadd %s, %s, tp, %%tprel_add(%s)%s\n",
-			rn, rn, str(c->sym.id), off);
-		fprintf(f, "\taddi %s, %s, %%tprel_lo(%s)%s\n",
-			rn, rn, str(c->sym.id), off);
+		fprintf(f, "\tlui %s, %%tprel_hi(%s)\n",
+			rn, str(c->sym.id));
+		fprintf(f, "\tadd %s, %s, tp, %%tprel_add(%s)\n",
+			rn, rn, str(c->sym.id));
+		fprintf(f, "\taddi %s, %s, %%tprel_lo(%s)\n",
+			rn, rn, str(c->sym.id));
 		break;
 	case SExtThr:
 		die("extern thread unavailable on rv64");
 	}
+	if (c->bits.i)
+		addimm(rn, c->bits.i, f);
 }
 
 static void
@@ -292,7 +310,7 @@ fixmem(Ref *pr, Fn *fn, FILE *f)
 	if (rtype(r) == RCon) {
 		c = &fn->con[r.val];
 		if (c->type == CAddr)
-		if (c->sym.type != SGlo) {
+		if (c->sym.type != SGlo || c->bits.i) {
 			loadcon(c, T6, Kl, f);
 			*pr = TMP(T6);
 		}
