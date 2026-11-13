@@ -56,15 +56,16 @@ config.h:
 		;;                                     \
 	esac > $@
 
+# Install as modc-qbe so it cannot be confused with upstream/homebrew qbe.
 install: qbe
 	mkdir -p "$(DESTDIR)$(BINDIR)"
-	install -m755 qbe "$(DESTDIR)$(BINDIR)/qbe"
+	install -m755 qbe "$(DESTDIR)$(BINDIR)/modc-qbe"
 
 uninstall:
-	rm -f "$(DESTDIR)$(BINDIR)/qbe"
+	rm -f "$(DESTDIR)$(BINDIR)/modc-qbe"
 
 clean:
-	rm -f *.o */*.o qbe
+	rm -f *.o */*.o qbe modc-qbe
 
 clean-gen: clean
 	rm -f config.h

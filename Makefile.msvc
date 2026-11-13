@@ -44,15 +44,16 @@ getopt.obj: getopt.h
 config.h:
 	@echo #define Deftgt T_amd64_win> $@
 
+# Install as modc-qbe.exe so it cannot be confused with upstream qbe.
 install: qbe.exe
 	if not exist "$(BINDIR)" mkdir "$(BINDIR)"
-	copy /y qbe.exe "$(BINDIR)\qbe.exe"
+	copy /y qbe.exe "$(BINDIR)\modc-qbe.exe"
 
 uninstall:
-	-del /q "$(BINDIR)\qbe.exe"
+	-del /q "$(BINDIR)\modc-qbe.exe"
 
 clean:
-	-del /q *.obj amd64\*.obj arm64\*.obj rv64\*.obj qbe.exe *.pdb *.ilk 2>nul
+	-del /q *.obj amd64\*.obj arm64\*.obj rv64\*.obj qbe.exe modc-qbe.exe *.pdb *.ilk 2>nul
 
 clean-gen: clean
 	-del /q config.h 2>nul
