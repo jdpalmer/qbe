@@ -1,5 +1,9 @@
 *.o
+*.obj
 qbe
+qbe.exe
+modc-qbe.exe
+modc-qbe
 config.h
 .comfile
 *.out
